@@ -1,0 +1,123 @@
+services:
+  # -------------------------------------------------------------
+  # HEDEF SERVİS (MOCK BACKEND)
+  # Tüm Gateway'ler istekleri buraya yönlendirecektir.
+  # Kendisi asla darboğaz (bottleneck) yaratmayacak kadar hafiftir.
+  # -------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mock-backend
+    restart: unless-stopped
+    ports:
+      # 8081 portundan doğrudan erişim: Baseline (Referans) testi için kullanılır
+      - "8081:8080"
+    environment:
+      - PORT=8080
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 2s
+    networks:
+      - loadtest-net
+
+  # -------------------------------------------------------------
+  # 1. YARIŞMACI: KONG GATEWAY (Nginx + OpenResty + LuaJIT)
+  # DB-less (Veritabanısız) Deklaratif Mod
+  # -------------------------------------------------------------
+  kong:
+    image: kong:3.9
+    container_name: kong-gateway
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: "/etc/kong/kong.yml"
+      # Performans testi için disk I/O log darboğazını önleme
+      KONG_PROXY_ACCESS_LOG: "/dev/null"
+      KONG_ADMIN_ACCESS_LOG: "/dev/null"
+      KONG_PROXY_ERROR_LOG: "/dev/stderr"
+      KONG_ADMIN_ERROR_LOG: "/dev/stderr"
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+      KONG_PROXY_LISTEN: "0.0.0.0:8000"
+      KONG_NGINX_WORKER_PROCESSES: "1"
+    volumes:
+      - ./gateways/kong/kong.yml:/etc/kong/kong.yml:ro
+    ports:
+      - "8000:8000"  # Kong Proxy Portu
+      - "8001:8001"  # Kong Admin API Portu
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - loadtest-net
+
+  # -------------------------------------------------------------
+  # 2. YARIŞMACI: TRAEFIK PROXY (Go Tabanlı, Goroutine Eşzamanlılığı)
+  # Dosya Sağlayıcı (File Provider) Modu
+  # -------------------------------------------------------------
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik-proxy
+    restart: unless-stopped
+    volumes:
+      - ./gateways/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./gateways/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    ports:
+      - "8082:80"    # Traefik Web Proxy Portu
+      - "8083:8080"  # Traefik Dashboard/API Portu
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - loadtest-net
+
+  # -------------------------------------------------------------
+  # 3. YARIŞMACI: APACHE APISIX (Nginx + OpenResty + Radix Tree)
+  # Standalone (etcd'siz) Deklaratif YAML Modu
+  # -------------------------------------------------------------
+  apisix:
+    image: apache/apisix:3.11.0-debian
+    container_name: apisix-gateway
+    restart: unless-stopped
+    volumes:
+      - ./gateways/apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ./gateways/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    ports:
+      - "9080:9080"  # APISIX HTTP Proxy Portu
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - loadtest-net
+
+# ---------------------------------------------------------------
+# İZOLE DOCKER AĞI
+# Test edilecek tüm bileşenler aynı izole bridge ağında çalışır.
+# ---------------------------------------------------------------
+networks:
+  loadtest-net:
+    name: loadtest-net
+    driver: bridge

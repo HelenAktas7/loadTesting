@@ -1,0 +1,24 @@
+_format_version: "3.0"
+
+# ---------------------------------------------------------------
+# KONG GATEWAY - DEKLARATİF (DB-LESS) + BASIC AUTHENTICATION
+# ---------------------------------------------------------------
+
+consumers:
+  - username: loadtest_user
+    basicauth_credentials:
+      - username: loadtest_user
+        password: secret123
+
+services:
+  - name: mock-service
+    url: http://mock-backend:8080
+    routes:
+      - name: mock-route
+        paths:
+          - /api/v1/test
+        strip_path: false
+        plugins:
+          - name: basic-auth
+            config:
+              hide_credentials: true

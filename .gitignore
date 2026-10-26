@@ -1,0 +1,21 @@
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+.vscode/
+.idea/
+
+# Binaries & Compiled Files
+*.exe
+*.dll
+*.so
+*.dylib
+backend/mock-backend
+
+# Temporary k6 outputs
+tests/*.json
+tests/*.csv
+
+# Local Environment
+.env

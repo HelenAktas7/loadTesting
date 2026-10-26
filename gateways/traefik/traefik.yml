@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------
+# TRAEFIK PROXY - STATİK YAPILANDIRMA DOSYASI
+# ---------------------------------------------------------------
+
+# Giriş Kapıları (Entrypoints)
+entryPoints:
+  web:
+    address: ":80"
+  traefik:
+    address: ":8080"
+
+# Dinamik Yapılandırma Sağlayıcısı (File Provider)
+providers:
+  file:
+    filename: "/etc/traefik/dynamic.yml"
+    watch: false   # Benchmark sırasında dosya izleme CPU tüketmesin
+
+# API & Dashboard (Sağlık kontrolü için)
+api:
+  dashboard: true
+  insecure: true
+
+# Performans için Log Optimizasyonu (Disk I/O darboğazını önleme)
+log:
+  level: ERROR

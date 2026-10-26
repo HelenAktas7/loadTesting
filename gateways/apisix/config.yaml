@@ -1,0 +1,18 @@
+# ---------------------------------------------------------------
+# APACHE APISIX - SİSTEM KONFİGÜRASYONU (config.yaml)
+# ---------------------------------------------------------------
+
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml  # Standalone (etcd'siz) Deklaratif Mod
+
+apisix:
+  node_listen: 9080        # HTTP Proxy Portu
+  enable_ipv6: false
+
+# Performans Testi İçin Log Optimizasyonu (Disk I/O darboğazını önleme)
+nginx_config:
+  error_log_level: "warn"
+  http:
+    access_log: "/dev/null"

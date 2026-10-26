@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------
+# APACHE APISIX - DEKLARATİF ROTA + BASIC AUTHENTICATION
+# ---------------------------------------------------------------
+
+consumers:
+  - username: loadtest_user
+    plugins:
+      basic-auth:
+        username: loadtest_user
+        password: secret123
+
+routes:
+  - id: 1
+    name: mock-route
+    uri: /api/v1/test
+    methods:
+      - GET
+      - POST
+    plugins:
+      basic-auth: {}
+    upstream:
+      type: roundrobin
+      nodes:
+        "mock-backend:8080": 1
+
+#END

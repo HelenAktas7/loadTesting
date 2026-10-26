@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------
+# TRAEFIK PROXY - DİNAMİK YÖNLENDİRME + BASIC AUTHENTICATION
+# ---------------------------------------------------------------
+
+http:
+  routers:
+    mock-router:
+      rule: "PathPrefix(`/api/v1/test`)"
+      entryPoints:
+        - web
+      middlewares:
+        - test-auth
+      service: mock-service
+
+  middlewares:
+    test-auth:
+      basicAuth:
+        users:
+          - "loadtest_user:{SHA}8rFPaOuZX6yzocNSh7d41b14VRE="
+
+  services:
+    mock-service:
+      loadBalancer:
+        servers:
+          - url: "http://mock-backend:8080"
+        passHostHeader: true

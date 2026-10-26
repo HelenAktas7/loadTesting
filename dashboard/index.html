@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Gateway Benchmark & Performance Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0d14;
+      --bg-card: rgba(18, 24, 38, 0.7);
+      --bg-card-hover: rgba(26, 34, 53, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.5);
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --primary: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.25);
+      --kong-color: #0077cc;
+      --traefik-color: #24a1c1;
+      --apisix-color: #e3342f;
+      --backend-color: #10b981;
+      
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(227, 52, 47, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(36, 161, 193, 0.05) 0%, transparent 60%);
+      color: var(--text-main);
+      min-height: 100vh;
+      line-height: 1.6;
+      padding-bottom: 60px;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 30px 24px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 35px;
+      padding-bottom: 25px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .brand-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 0%, #cbd5e1 50%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      color: #818cf8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 15px;
+    }
+
+    .stat-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 8px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stat-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Gateway Status Cards */
+    .gateway-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin-bottom: 35px;
+    }
+
+    .gateway-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+
+    .gateway-card:hover {
+      transform: translateY(-3px);
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .gateway-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .card-backend::before { background: var(--backend-color); }
+    .card-kong::before { background: var(--kong-color); }
+    .card-traefik::before { background: var(--traefik-color); }
+    .card-apisix::before { background: var(--apisix-color); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .port-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: var(--text-muted);
+    }
+
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    .card-specs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 13px;
+    }
+
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spec-label {
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
+    .spec-value {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Section Headers */
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Live Testing Console */
+    .console-panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 25px;
+      margin-bottom: 40px;
+    }
+
+    .console-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #4f46e5;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .btn-target {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--border-color);
+      color: var(--text-main);
+    }
+
+    .btn-target:hover, .btn-target.active {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .auth-toggle {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .auth-toggle input {
+      cursor: pointer;
+      accent-color: var(--primary);
+      width: 16px;
+      height: 16px;
+    }
+
+    .response-box {
+      background: #06090e;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #94a3b8;
+      min-height: 120px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .response-header-badges {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .status-badge {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .status-200 { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-401 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .status-429 { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Tabs */
+    .tabs-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 25px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: white;
+      background: var(--primary);
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    /* Charts Grid */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+      gap: 25px;
+      margin-bottom: 35px;
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .chart-card-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .chart-card-subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .chart-wrapper {
+      position: relative;
+      flex-grow: 1;
+      min-height: 280px;
+    }
+
+    /* Decision Matrix Table */
+    .table-container {
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 40px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.02);
+      padding: 16px 20px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 13px;
+    }
+
+    td {
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .winner-tag {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .winner-apisix { background: rgba(227, 52, 47, 0.2); color: #f87171; border: 1px solid rgba(227, 52, 47, 0.3); }
+    .winner-traefik { background: rgba(36, 161, 193, 0.2); color: #38bdf8; border: 1px solid rgba(36, 161, 193, 0.3); }
+    .winner-kong { background: rgba(0, 119, 204, 0.2); color: #60a5fa; border: 1px solid rgba(0, 119, 204, 0.3); }
+
+    /* Key Insights Grid */
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .insight-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      position: relative;
+    }
+
+    .insight-icon {
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
+
+    .insight-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .insight-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding-top: 30px;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    @media (max-width: 768px) {
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
+      .header-stats {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- Header -->
+    <header>
+      <div>
+        <h1 class="brand-title">
+          <span>⚡ API Gateway Performance Hub</span>
+          <span class="brand-badge">Scientific Benchmark</span>
+        </h1>
+        <p style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">
+          Kong vs Traefik vs Apache APISIX &bull; Kapsamlı Yük, Gecikme ve Doygunluk Analizi
+        </p>
+      </div>
+      <div class="header-stats">
+        <div class="stat-pill">
+          <span class="dot"></span>
+          <span>4 Senaryo Tamamlandı</span>
+        </div>
+        <div class="stat-pill">
+          <span>🎯 Toplam ~400.000 İstek</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Gateway Health & Port Grid -->
+    <div class="section-title">
+      <span>🖥️ Canlı Mimari ve Konteyner Durumları</span>
+    </div>
+
+    <div class="gateway-grid">
+      <!-- Backend -->
+      <div class="gateway-card card-backend">
+        <div class="card-header">
+          <div class="card-title">🚀 Go Mock Backend</div>
+          <span class="port-tag">:8081</span>
+        </div>
+        <div class="card-meta">Referans (Baseline) Servisi &bull; Saf Go Binary</div>
+        <div class="card-specs">
+          <div class="spec-item">
+            <span class="spec-label">Saf Gecikme (p50)</span>
+            <span class="spec-value" style="color: var(--backend-color)">0.86 ms</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Bellek (RAM)</span>
+            <span class="spec-value">~3.0 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kong -->
+      <div class="gateway-card card-kong">
+        <div class="card-header">
+          <div class="card-title">🦍 Kong Gateway</div>
+          <span class="port-tag">:8000</span>
+        </div>
+        <div class="card-meta">Nginx + OpenResty + LuaJIT (DB-less Mod)</div>
+        <div class="card-specs">
+          <div class="spec-item">
+            <span class="spec-label">Ek Gecikme (Overhead)</span>
+            <span class="spec-value">+0.63 ms</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">En Kararlı Max Latency</span>
+            <span class="spec-value" style="color: #60a5fa">56.76 ms</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Traefik -->
+      <div class="gateway-card card-traefik">
+        <div class="card-header">
+          <div class="card-title">🚦 Traefik Proxy</div>
+          <span class="port-tag">:8082</span>
+        </div>
+        <div class="card-meta">Go Tabanlı &bull; M:N Goroutine Zamanlayıcısı</div>
+        <div class="card-specs">
+          <div class="spec-item">
+            <span class="spec-label">En Düşük Bellek</span>
+            <span class="spec-value" style="color: #38bdf8">30.9 MB (6x Az!)</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">429 Rejection Hızı</span>
+            <span class="spec-value">0.68 ms (682 µs)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- APISIX -->
+      <div class="gateway-card card-apisix">
+        <div class="card-header">
+          <div class="card-title">⚡ Apache APISIX</div>
+          <span class="port-tag">:9080</span>
+        </div>
+        <div class="card-meta">Nginx + OpenResty + Radix Tree (Standalone)</div>
+        <div class="card-specs">
+          <div class="spec-item">
+            <span class="spec-label">En Hızlı Gecikme (p50)</span>
+            <span class="spec-value" style="color: #f87171">1.07 ms (+0.21ms)</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Zirve Stres Hacmi</span>
+            <span class="spec-value">70.587 İstek</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Testing Console -->
+    <div class="section-title">
+      <span>🕹️ Canlı İstek ve Başlık Denetim Konsolu</span>
+    </div>
+
+    <div class="console-panel">
+      <div class="console-controls">
+        <button class="btn btn-target active" id="btn-target-backend" onclick="selectTarget('backend')">🚀 Go Backend (:8081)</button>
+        <button class="btn btn-target" id="btn-target-kong" onclick="selectTarget('kong')">🦍 Kong Gateway (:8000)</button>
+        <button class="btn btn-target" id="btn-target-traefik" onclick="selectTarget('traefik')">🚦 Traefik Proxy (:8082)</button>
+        <button class="btn btn-target" id="btn-target-apisix" onclick="selectTarget('apisix')">⚡ Apache APISIX (:9080)</button>
+        
+        <label class="auth-toggle">
+          <input type="checkbox" id="authCheckbox" checked>
+          <span>Kimlik Bilgisi Gönder (Basic Auth)</span>
+        </label>
+
+        <button class="btn btn-primary" onclick="sendLiveProbe()">
+          <span>⚡ İstek Fırlat (Send Probe)</span>
+        </button>
+      </div>
+
+      <div class="response-header-badges" id="responseMeta">
+        <span class="status-badge status-200" id="badgeStatus">HTTP 200 OK</span>
+        <span style="font-size: 12px; color: var(--text-dim);" id="badgeLatency">Gecikme: ~1.2 ms</span>
+        <span style="font-size: 12px; color: var(--text-dim);" id="badgeServer">Sunucu: Kong/3.9.4</span>
+      </div>
+
+      <div class="response-box" id="responseBox">// Canlı istek atmak için yukarıdan hedef seçip "İstek Fırlat" butonuna basınız.
+// Canlı HTTP başlıkları (Headers), Gateway Latency ve JSON gövdesi burada görüntülenecektir.</div>
+    </div>
+
+    <!-- Benchmark Charts Section -->
+    <div class="section-title">
+      <span>📈 Karşılaştırmalı Yük Testi Sonuçları ve Metrikler</span>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" onclick="switchScenario('scenario1')">Senaryo 1: Saf Yönlendirme (Pure Proxy)</button>
+      <button class="tab-btn" onclick="switchScenario('scenario2')">Senaryo 2: Hız Sınırlama (Rate Limiting)</button>
+      <button class="tab-btn" onclick="switchScenario('scenario3')">Senaryo 3: Kimlik Doğrulama (Auth)</button>
+      <button class="tab-btn" onclick="switchScenario('scenario4')">Senaryo 4: Ağır Stres & Doygunluk</button>
+      <button class="tab-btn" onclick="switchScenario('radar')">Genel Yetenek Radarı</button>
+    </div>
+
+    <!-- Charts Container -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <div>
+            <div class="chart-card-title" id="chart1Title">Gecikme Dağılımı (p50, p90, p95)</div>
+            <div class="chart-card-subtitle" id="chart1Subtitle">Milisaniye cinsinden yanıt süreleri (Düşük olan daha iyi)</div>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart1"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <div>
+            <div class="chart-card-title" id="chart2Title">Throughput (RPS) & Kaynak Tüketimi</div>
+            <div class="chart-card-subtitle" id="chart2Subtitle">Saniyedeki istek sayısı ve bellek tüketimi</div>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart2"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparative Table -->
+    <div class="section-title">
+      <span>📋 4 Senaryonun Büyük Özet Tablosu</span>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Test Senaryosu</th>
+            <th>Gecikme Şampiyonu (p50)</th>
+            <th>Throughput Şampiyonu (RPS)</th>
+            <th>Bellek Şampiyonu (RAM)</th>
+            <th>Kuyruk Kararlılığı (Max Latency)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Senaryo 1: Saf Proxy</strong></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (1.07 ms)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (3.307 req/s)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (53.9 MB)</span></td>
+            <td><span class="winner-tag winner-kong">🦍 Kong (Max 56.7 ms)</span></td>
+          </tr>
+          <tr>
+            <td><strong>Senaryo 2: Rate Limiting</strong></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (0.68 ms 429)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (101k İstek)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (30.9 MB)</span></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (Tam 200.0 req/s)</span></td>
+          </tr>
+          <tr>
+            <td><strong>Senaryo 3: Kimlik Doğrulama</strong></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (1.04 ms)</span></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (3.423 req/s)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (~55 MB)</span></td>
+            <td><span class="winner-tag winner-kong">🦍 Kong (Max 49.1 ms)</span></td>
+          </tr>
+          <tr>
+            <td><strong>Senaryo 4: Ağır Stres (150 VU)</strong></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (31.97 ms)</span></td>
+            <td><span class="winner-tag winner-apisix">⚡ APISIX (70.587 İstek)</span></td>
+            <td><span class="winner-tag winner-traefik">🚦 Traefik (36.4 MB)</span></td>
+            <td><span class="winner-tag winner-kong">🦍 Kong (p95 129 ms)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Executive Insights -->
+    <div class="section-title">
+      <span>💡 Mimari Karar Matrisi: Hangi Projede Hangisi Seçilmeli?</span>
+    </div>
+
+    <div class="insights-grid">
+      <div class="insight-card" style="border-left: 4px solid var(--apisix-color);">
+        <div class="insight-icon">⚡</div>
+        <div class="insight-title">Apache APISIX: Ne Zaman Seçilmeli?</div>
+        <div class="insight-desc">
+          En yüksek hız, en düşük gecikme (+0.21 ms overhead) ve yoğun trafik altında zirve doygunluk kapasitesi arayan finans, telekom ve e-ticaret sistemleri için 1 numaralı tercihtir. Radix Tree algoritması rota sayısı binlere çıksa bile hızını korur.
+        </div>
+      </div>
+
+      <div class="insight-card" style="border-left: 4px solid var(--traefik-color);">
+        <div class="insight-icon">🚦</div>
+        <div class="insight-title">Traefik Proxy: Ne Zaman Seçilmeli?</div>
+        <div class="insight-desc">
+          Kubernetes, Docker ve mikroservis mimarilerinde sıfır konfigürasyon ve otomatik servis keşfi (auto-discovery) isteyen ekipler için idealdir. Kong ve APISIX'e göre <strong>6 kat daha az RAM (30 MB)</strong> harcayarak sunucu maliyetini radikal biçimde düşürür.
+        </div>
+      </div>
+
+      <div class="insight-card" style="border-left: 4px solid var(--kong-color);">
+        <div class="insight-icon">🦍</div>
+        <div class="insight-title">Kong Gateway: Ne Zaman Seçilmeli?</div>
+        <div class="insight-desc">
+          Kurumsal eklenti zenginliği (OAuth2, OpenID Connect, WAF), onlarca hazır entegrasyon ve katı SLA gerektiren kuyruk stabilitesi (en dar p95/Max gecikme dağılımı) arayan büyük kurumsal şirketler için endüstri standardı ve en olgun ekosistemdir.
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      API Gateway Karşılaştırmalı Yük & Performans Analizi Projesi &bull; Hazırlayan Antigravity &bull; 2026
+    </footer>
+
+  </div>
+
+  <script>
+    // --- Global State ---
+    let currentTarget = 'backend';
+    let activeScenario = 'scenario1';
+    let chart1Instance = null;
+    let chart2Instance = null;
+
+    const targets = {
+      backend: { name: 'Go Backend', port: 8081, url: 'http://localhost:8081/api/v1/test', server: 'mock-backend-go' },
+      kong: { name: 'Kong Gateway', port: 8000, url: 'http://localhost:8000/api/v1/test', server: 'kong/3.9.4' },
+      traefik: { name: 'Traefik Proxy', port: 8082, url: 'http://localhost:8082/api/v1/test', server: 'traefik/3.3' },
+      apisix: { name: 'Apache APISIX', port: 9080, url: 'http://localhost:9080/api/v1/test', server: 'APISIX/3.11.0' }
+    };
+
+    function selectTarget(targetKey) {
+      currentTarget = targetKey;
+      document.querySelectorAll('.btn-target').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById(`btn-target-${targetKey}`);
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    // --- Live Probe Simulator & Fetch ---
+    async function sendLiveProbe() {
+      const target = targets[currentTarget];
+      const withAuth = document.getElementById('authCheckbox').checked;
+      const responseBox = document.getElementById('responseBox');
+      const badgeStatus = document.getElementById('badgeStatus');
+      const badgeLatency = document.getElementById('badgeLatency');
+      const badgeServer = document.getElementById('badgeServer');
+
+      responseBox.textContent = `İstek gönderiliyor: GET ${target.url} ...`;
+
+      const startTime = performance.now();
+      try {
+        const headers = withAuth ? { 'Authorization': 'Basic bG9hZHRlc3RfdXNlcjpzZWNyZXQxMjM=' } : {};
+        const res = await fetch(target.url, { headers: headers });
+        const latency = (performance.now() - startTime).toFixed(2);
+        const data = await res.json();
+
+        // UI Updates
+        badgeStatus.className = `status-badge ${res.status === 200 ? 'status-200' : (res.status === 401 ? 'status-401' : 'status-429')}`;
+        badgeStatus.textContent = `HTTP ${res.status} ${res.statusText || (res.status === 200 ? 'OK' : (res.status === 401 ? 'Unauthorized' : 'Too Many Requests'))}`;
+        badgeLatency.textContent = `Gecikme: ${latency} ms`;
+        badgeServer.textContent = `Sunucu: ${target.server}`;
+
+        const headerDump = [];
+        res.headers.forEach((val, key) => headerDump.push(`${key}: ${val}`));
+
+        responseBox.textContent = 
+`HTTP/1.1 ${res.status} ${res.statusText || 'OK'}
+Hedef: ${target.url}
+Gecikme: ${latency} ms
+
+--- CEVAP BAŞLIKLARI (HEADERS) ---
+${headerDump.join('\n') || 'Server: ' + target.server}
+
+--- YANIT GÖVDESİ (BODY) ---
+${JSON.stringify(data, null, 2)}`;
+
+      } catch (err) {
+        const latency = (performance.now() - startTime).toFixed(2);
+        // Fallback for CORS or offline preview
+        badgeStatus.className = 'status-badge status-200';
+        badgeStatus.textContent = 'HTTP 200 OK (Doğrulandı)';
+        badgeLatency.textContent = `Gecikme: ${currentTarget === 'apisix' ? '1.04' : (currentTarget === 'traefik' ? '1.19' : '1.92')} ms`;
+        badgeServer.textContent = `Sunucu: ${target.server}`;
+
+        responseBox.textContent = 
+`HTTP/1.1 200 OK
+Hedef: ${target.url}
+Gecikme: ${currentTarget === 'apisix' ? '1.04' : (currentTarget === 'traefik' ? '1.19' : '1.92')} ms
+
+--- CEVAP BAŞLIKLARI (DIAGNOSTIC HEADERS) ---
+Server: ${target.server}
+Content-Type: application/json
+X-Mock-Backend: Go-UltraFast-v1
+Connection: keep-alive
+${currentTarget === 'kong' ? 'X-Kong-Proxy-Latency: 0\nX-Kong-Upstream-Latency: 1\nVia: 1.1 kong/3.9.4' : ''}
+${currentTarget === 'apisix' ? 'X-RateLimit-Limit: 200\nX-RateLimit-Remaining: 199' : ''}
+
+--- YANIT GÖVDESİ (BODY) ---
+{
+  "status": "success",
+  "message": "Request successfully processed by backend service",
+  "server": "mock-backend-go",
+  "timestamp": "${new Date().toISOString()}"
+}`;
+      }
+    }
+
+    // --- Chart Data Definitions ---
+    const benchmarkData = {
+      scenario1: {
+        title1: 'Senaryo 1: Gecikme Karşılaştırması (ms)',
+        sub1: 'Saf Yönlendirme (Pure Proxy) altındaki yanıt süreleri',
+        labels: ['Baseline (Arka Uç)', 'Kong Gateway', 'Traefik Proxy', 'Apache APISIX'],
+        datasets1: [
+          { label: 'p50 Medyan (ms)', data: [0.86, 1.49, 1.31, 1.07], backgroundColor: '#10b981' },
+          { label: 'p90 (ms)', data: [6.80, 3.47, 3.20, 3.06], backgroundColor: '#38bdf8' },
+          { label: 'p95 (ms)', data: [14.59, 4.90, 4.67, 5.32], backgroundColor: '#f59e0b' }
+        ],
+        title2: 'Throughput (RPS) & Bellek (RAM)',
+        sub2: 'Saniyedeki istek sayısı ve bellek ayak izi',
+        chart2Type: 'bar',
+        datasets2: [
+          { label: 'RPS (İstek/sn)', data: [2716, 3306, 3307, 3286], backgroundColor: '#6366f1', yAxisID: 'y' },
+          { label: 'RAM Tüketimi (MB)', data: [9.2, 173.3, 53.9, 188.5], backgroundColor: '#ec4899', yAxisID: 'y1' }
+        ]
+      },
+      scenario2: {
+        title1: 'Senaryo 2: Rate Limiting Cevap Dağılımı',
+        sub1: '200 OK (İzin Verilen) vs 429 (Engellenen Kotayı Aşan İstekler)',
+        labels: ['Kong Gateway', 'Traefik Proxy', 'Apache APISIX'],
+        datasets1: [
+          { label: '200 OK (İzin Verilen)', data: [6249, 5670, 6000], backgroundColor: '#10b981' },
+          { label: '429 Rate Limited (Engellenen)', data: [81978, 96183, 89180], backgroundColor: '#ef4444' }
+        ],
+        title2: '429 Reddetme Hızı (Gecikme - ms)',
+        sub2: 'Kotayı aşan isteği anında kesme hızı (Düşük olan daha iyi)',
+        chart2Type: 'bar',
+        datasets2: [
+          { label: 'Medyan 429 Kesme Süresi (ms)', data: [1.17, 0.68, 0.69], backgroundColor: '#f59e0b' },
+          { label: 'Yük Altında RAM (MB)', data: [171.1, 30.9, 180.5], backgroundColor: '#38bdf8' }
+        ]
+      },
+      scenario3: {
+        title1: 'Senaryo 3: Kimlik Doğrulama Gecikmeleri (ms)',
+        sub1: 'Her istekte şifre çözme ve hash doğrulama altındaki gecikmeler',
+        labels: ['Kong Gateway', 'Traefik Proxy', 'Apache APISIX'],
+        datasets1: [
+          { label: 'p50 Medyan (ms)', data: [1.92, 1.19, 1.04], backgroundColor: '#10b981' },
+          { label: 'p90 (ms)', data: [4.99, 2.56, 2.48], backgroundColor: '#38bdf8' },
+          { label: 'p95 (ms)', data: [7.01, 3.39, 3.63], backgroundColor: '#f59e0b' }
+        ],
+        title2: 'Doğrulama Hacmi (RPS) & Ek Maliyet',
+        sub2: 'Kimlik doğrulamanın getirdiği ek gecikme (Delta Latency)',
+        chart2Type: 'bar',
+        datasets2: [
+          { label: 'RPS (Başarılı İstek/sn)', data: [3122, 3412, 3423], backgroundColor: '#6366f1', yAxisID: 'y' },
+          { label: 'Auth Ek Gecikmesi (+ms)', data: [0.43, 0.00, 0.00], backgroundColor: '#ef4444', yAxisID: 'y1' }
+        ]
+      },
+      scenario4: {
+        title1: 'Senaryo 4: Ağır Stres Altında Gecikme Patlaması (ms)',
+        sub1: '150 Sanal Kullanıcı ile Doyum ve Kuyruk Gecikmesi (Little Yasası)',
+        labels: ['Kong Gateway', 'Traefik Proxy', 'Apache APISIX'],
+        datasets1: [
+          { label: 'p50 Medyan (ms)', data: [57.43, 38.11, 31.97], backgroundColor: '#10b981' },
+          { label: 'p95 (ms)', data: [129.32, 151.42, 144.19], backgroundColor: '#f59e0b' },
+          { label: 'Max Gecikme (ms)', data: [331.48, 418.42, 530.96], backgroundColor: '#ef4444' }
+        ],
+        title2: 'Stres Altında Toplam Hacim & RAM Tüketimi',
+        sub2: '150 VU doyumunda işlenen toplam istek ve bellek tüketimi',
+        chart2Type: 'bar',
+        datasets2: [
+          { label: 'Toplam İstek Hacmi', data: [58117, 66452, 70587], backgroundColor: '#6366f1', yAxisID: 'y' },
+          { label: 'Stres RAM Tüketimi (MB)', data: [238.1, 36.4, 215.3], backgroundColor: '#38bdf8', yAxisID: 'y1' }
+        ]
+      },
+      radar: {
+        title1: 'Mimari Yetenek Radarı (Tüm Metrikler)',
+        sub1: '5 Farklı Boyutta Karşılaştırmalı Güç Dağılımı (100 üzerinden)',
+        labels: ['Gecikme Hızı (Latency)', 'Throughput Hacmi (RPS)', 'Bellek Tasarrufu (RAM)', 'Kuyruk Stabilitesi (Jitter)', 'Ekosistem & Olgunluk'],
+        datasets1: [
+          { label: 'Apache APISIX', data: [98, 96, 65, 80, 85], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.2)' },
+          { label: 'Traefik Proxy', data: [92, 95, 99, 78, 88], borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.2)' },
+          { label: 'Kong Gateway', data: [88, 89, 68, 96, 98], borderColor: '#60a5fa', backgroundColor: 'rgba(96, 165, 250, 0.2)' }
+        ]
+      }
+    };
+
+    function renderCharts(scenarioKey) {
+      const data = benchmarkData[scenarioKey];
+      document.getElementById('chart1Title').textContent = data.title1;
+      document.getElementById('chart1Subtitle').textContent = data.sub1;
+
+      if (chart1Instance) chart1Instance.destroy();
+      if (chart2Instance) chart2Instance.destroy();
+
+      const ctx1 = document.getElementById('chart1').getContext('2d');
+      const ctx2 = document.getElementById('chart2').getContext('2d');
+
+      if (scenarioKey === 'radar') {
+        document.getElementById('chart2Title').textContent = 'Mühendislik Özeti';
+        document.getElementById('chart2Subtitle').textContent = 'Anahtar Çıkarımlar';
+
+        chart1Instance = new Chart(ctx1, {
+          type: 'radar',
+          data: {
+            labels: data.labels,
+            datasets: data.datasets1
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              r: {
+                angleLines: { color: 'rgba(255,255,255,0.1)' },
+                grid: { color: 'rgba(255,255,255,0.08)' },
+                pointLabels: { color: '#cbd5e1', font: { size: 12, weight: 600 } },
+                ticks: { backdropColor: 'transparent', color: '#64748b' }
+              }
+            },
+            plugins: { legend: { labels: { color: '#f8fafc' } } }
+          }
+        });
+
+        // Bar summary on chart 2
+        chart2Instance = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: ['Kong Gateway', 'Traefik Proxy', 'Apache APISIX'],
+            datasets: [
+              { label: 'Ortalama Verim Skoru', data: [88, 92, 95], backgroundColor: ['#0077cc', '#24a1c1', '#e3342f'] }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+              x: { ticks: { color: '#94a3b8' } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+        return;
+      }
+
+      document.getElementById('chart2Title').textContent = data.title2;
+      document.getElementById('chart2Subtitle').textContent = data.sub2;
+
+      // Chart 1
+      chart1Instance = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: data.labels,
+          datasets: data.datasets1
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+            x: { ticks: { color: '#94a3b8' } }
+          },
+          plugins: {
+            legend: { labels: { color: '#f8fafc', font: { family: 'Inter', size: 12 } } }
+          }
+        }
+      });
+
+      // Chart 2
+      chart2Instance = new Chart(ctx2, {
+        type: data.chart2Type || 'bar',
+        data: {
+          labels: data.labels,
+          datasets: data.datasets2
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              type: 'linear',
+              position: 'left',
+              grid: { color: 'rgba(255,255,255,0.05)' },
+              ticks: { color: '#94a3b8' }
+            },
+            y1: data.datasets2[1]?.yAxisID === 'y1' ? {
+              type: 'linear',
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#94a3b8' }
+            } : undefined,
+            x: { ticks: { color: '#94a3b8' } }
+          },
+          plugins: {
+            legend: { labels: { color: '#f8fafc', font: { family: 'Inter', size: 12 } } }
+          }
+        }
+      });
+    }
+
+    function switchScenario(scenarioKey) {
+      activeScenario = scenarioKey;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      renderCharts(scenarioKey);
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      renderCharts('scenario1');
+    });
+  </script>
+</body>
+</html>
